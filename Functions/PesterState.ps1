@@ -132,6 +132,7 @@ function New-PesterState {
                 [string]$Name,
                 [ValidateSet("Failed", "Passed", "Skipped", "Pending", "Inconclusive")]
                 [string]$Result,
+                [string]$Remark,
                 [Nullable[TimeSpan]]$Time,
                 [string]$FailureMessage,
                 [string]$StackTrace,
@@ -200,6 +201,7 @@ function New-PesterState {
                 Passed                 = $Passed
                 Result                 = $Result
                 Time                   = $Time
+                Remark                 = $Remark
                 FailureMessage         = $FailureMessage
                 StackTrace             = $StackTrace
                 ErrorRecord            = $ErrorRecord

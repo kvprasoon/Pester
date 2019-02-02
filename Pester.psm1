@@ -1041,6 +1041,9 @@ New-PesterOption
         [Parameter(Mandatory = $true, ParameterSetName = 'NewOutputSet')]
         [string] $OutputFile,
 
+        [Parameter( ParameterSetName = 'NewOutputSet')]
+        [string] $XSLPath,
+
         [Parameter(ParameterSetName = 'NewOutputSet')]
         [ValidateSet('NUnitXml')]
         [string] $OutputFormat = 'NUnitXml',

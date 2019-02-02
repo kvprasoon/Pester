@@ -108,6 +108,8 @@ about_should
         [Parameter(Position = 1)]
         [ScriptBlock] $Test = {},
 
+        [String] $Remark,
+
         [System.Collections.IDictionary[]] $TestCases,
 
         [Parameter(ParameterSetName = 'Pending')]
@@ -130,6 +132,8 @@ function ItImpl {
         [Parameter(Position = 1)]
         [ScriptBlock] $Test,
 
+        [String] $Remark,
+
         [System.Collections.IDictionary[]] $TestCases,
         [Parameter(ParameterSetName = 'Pending')]
         [Switch] $Pending,
@@ -150,6 +154,10 @@ function ItImpl {
     }
     if ($PSCmdlet.ParameterSetName -ne 'Pending') {
         $Pending = $false
+    }
+
+    if ([string]::IsNullOrEmpty($Remark)){
+        $Remark = 'No Remarks found'
     }
 
     #unless Skip or Pending is specified you must specify a ScriptBlock to the Test parameter
@@ -220,6 +228,7 @@ function ItImpl {
                 Scriptblock            = $Test
                 Parameters             = $testCase
                 ParameterizedSuiteName = $Name
+                Remark                 = $Remark
                 OutputScriptBlock      = $OutputScriptBlock
             }
 
@@ -227,7 +236,7 @@ function ItImpl {
         }
     }
     else {
-        Invoke-Test -Name $Name -ScriptBlock $Test @pendingSkip -OutputScriptBlock $OutputScriptBlock
+        Invoke-Test -Name $Name -ScriptBlock $Test @pendingSkip -Remark $Remark -OutputScriptBlock $OutputScriptBlock
     }
 }
 
@@ -241,6 +250,8 @@ function Invoke-Test {
         [ScriptBlock] $ScriptBlock,
 
         [scriptblock] $OutputScriptBlock,
+
+        [String] $Remark,
 
         [System.Collections.IDictionary] $Parameters,
         [string] $ParameterizedSuiteName,
@@ -295,9 +306,9 @@ function Invoke-Test {
                 $pester.LeaveTest()
             }
 
-            $result = ConvertTo-PesterResult -Name $Name -ErrorRecord $errorRecord
+            $result = ConvertTo-PesterResult -Name $Name -Remark $Remark -ErrorRecord $errorRecord
             $orderedParameters = Get-OrderedParameterDictionary -ScriptBlock $ScriptBlock -Dictionary $Parameters
-            $Pester.AddTestResult( $result.Name, $result.Result, $null, $result.FailureMessage, $result.StackTrace, $ParameterizedSuiteName, $orderedParameters, $result.ErrorRecord )
+            $Pester.AddTestResult( $result.Name, $result.Result,$Remark, $null, $result.FailureMessage, $result.StackTrace, $ParameterizedSuiteName, $orderedParameters, $result.ErrorRecord )
             #todo: disabling progress reporting see above & $SafeCommands['Write-Progress'] -Activity "Running test '$Name'" -Completed -Status Processing
         }
     }

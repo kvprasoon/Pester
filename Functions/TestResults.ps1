@@ -97,6 +97,7 @@ function Write-NUnitReport($PesterState, [System.Xml.XmlWriter] $XmlWriter) {
     $XmlWriter.WriteStartDocument($false)
 
     # Write Root Element
+    $XmlWriter.WriteProcessingInstruction('xml-stylesheet',"type=`"text/xsl`" href=`"$XSLPath`"")
     $xmlWriter.WriteStartElement('test-results')
 
     Write-NUnitTestResultAttributes @PSBoundParameters
@@ -385,6 +386,7 @@ function Write-NUnitTestCaseAttributes($TestResult, [System.Xml.XmlWriter] $XmlW
     $XmlWriter.WriteAttributeString('name', $testName)
     $XmlWriter.WriteAttributeString('time', (Convert-TimeSpan $TestResult.Time))
     $XmlWriter.WriteAttributeString('asserts', '0')
+    $XmlWriter.WriteAttributeString('label', $TestResult.Remark)
     $XmlWriter.WriteAttributeString('success', $TestResult.Passed)
 
     switch ($TestResult.Result) {

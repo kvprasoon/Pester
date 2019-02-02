@@ -172,6 +172,7 @@ function ConvertTo-PesterResult {
     param(
         [String] $Name,
         [Nullable[TimeSpan]] $Time,
+        [string]$Remark = $null,
         [System.Management.Automation.ErrorRecord] $ErrorRecord
     )
 
@@ -180,6 +181,7 @@ function ConvertTo-PesterResult {
         Time           = $time
         FailureMessage = ""
         StackTrace     = ""
+        Remark         = $Remark
         ErrorRecord    = $null
         Success        = $false
         Result         = "Failed"
