@@ -97,7 +97,9 @@ function Write-NUnitReport($PesterState, [System.Xml.XmlWriter] $XmlWriter) {
     $XmlWriter.WriteStartDocument($false)
 
     # Write Root Element
-    $XmlWriter.WriteProcessingInstruction('xml-stylesheet',"type=`"text/xsl`" href=`"$XSLPath`"")
+    if(-not [string]::IsNullOrEmpty($XSLPath)){
+        $XmlWriter.WriteProcessingInstruction('xml-stylesheet',"type=`"text/xsl`" href=`"$XSLPath`"")
+    }
     $xmlWriter.WriteStartElement('test-results')
 
     Write-NUnitTestResultAttributes @PSBoundParameters
