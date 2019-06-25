@@ -1,3 +1,24 @@
+## 4.8.1 (May 11, 2019)
+
+- Fix default parameter comparison on v2 [#1310](https://github.com/pester/Pester/pull/1310)
+
+## 4.8.0 (May 1, 2019)
+
+- Add parameter to remove validation when mocking [#1278](https://github.com/pester/Pester/pull/1278)
+- Add built-in readonly variables to conflicting params list [#1298](https://github.com/pester/Pester/pull/1298)
+- Fix using function definition as mock paramfilter [#1293](https://github.com/pester/Pester/pull/1293)
+- Fix temp path on macOS [#1294](https://github.com/pester/Pester/pull/1294)
+- Fix filtering out error lines [#1253](https://github.com/pester/Pester/pull/1253)
+- Fix mock teardown when mock is outside of Describe [#1255](https://github.com/pester/Pester/pull/1255)
+- Remove arrow from string comparison [#1264](https://github.com/pester/Pester/pull/1264)
+
+## 4.7.3 (March 23,2019)
+
+- Add shorter output when comparing long strings [#1248](https://github.com/pester/Pester/pull/1248)
+- Add platform specific tags for PSGallery
+- Fix manifest to avoid loading the module unnecessarily [#1259](https://github.com/pester/Pester/pull/1259)
+- Fix typos in release script
+
 ## 4.7.2 (March 8, 2019)
 
 - Fix stripping last character in parameter filter [#1258](https://github.com/pester/Pester/pull/1258)

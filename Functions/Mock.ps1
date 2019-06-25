@@ -63,6 +63,27 @@ is to be mocked.  This should be a module that _calls_ the mocked
 command; it doesn't necessarily have to be the same module which
 originally implemented the command.
 
+.PARAMETER RemoveParameterType
+Optional parameter that removes a type of a parameter in the fuction
+declaration. This is useful when you are testing a function that has a
+strongly typed parameter but you are not able to create an object of the
+required type.
+
+This parameter applies only to the first definintion of a mock within the
+current scope. If there are multiple mocks with the same name, any subsequent
+configuration of parameters will be ingored, including parameter validation
+described below.
+
+.PARAMETER RemoveParameterValidation
+Optional parameter that removes validation from a parameter in the fuction
+declaration. This is useful when you are testing a function that validates
+it's input, but you are unable to satisfy the validation.
+
+This parameter applies only to the first definintion of a mock within the
+current scope. If there are multiple mocks with the same name, any subsequent
+configuration of parameters will be ingored, including parameter types described
+above.
+
 .EXAMPLE
 Mock Get-ChildItem { return @{FullName = "A_File.TXT"} }
 
@@ -157,10 +178,12 @@ about_Mocking
     [CmdletBinding()]
     param(
         [string]$CommandName,
-        [ScriptBlock]$MockWith = {},
+        [ScriptBlock]$MockWith = { },
         [switch]$Verifiable,
-        [ScriptBlock]$ParameterFilter = {$True},
-        [string]$ModuleName
+        [ScriptBlock]$ParameterFilter = { $True },
+        [string]$ModuleName,
+        [string[]]$RemoveParameterType,
+        [string[]]$RemoveParameterValidation
     )
 
     Assert-DescribeInProgress -CommandName Mock
@@ -200,6 +223,7 @@ about_Mocking
 
     if (-not $mock) {
         $metadata = $null
+        $originalMetadata = $null
         $cmdletBinding = ''
         $paramBlock = ''
         $dynamicParamBlock = ''
@@ -219,7 +243,7 @@ about_Mocking
             # Some versions of PowerShell may include dynamic parameters here
             # We will filter them out and add them at the end to be
             # compatible with both earlier and later versions
-            $dynamicParams = $metadata.Parameters.Values | & $SafeCommands['Where-Object'] {$_.IsDynamic}
+            $dynamicParams = $metadata.Parameters.Values | & $SafeCommands['Where-Object'] { $_.IsDynamic }
             if ($null -ne $dynamicParams) {
                 $dynamicparams | & $SafeCommands['ForEach-Object'] { $null = $metadata.Parameters.Remove($_.name) }
             }
@@ -233,7 +257,8 @@ about_Mocking
             }
 
             # Will modify $metadata object in-place
-            Repair-ConflictingParameters -Metadata $metadata
+            $originalMetadata = $metadata
+            $metadata = Repair-ConflictingParameters -Metadata $metadata -RemoveParameterType $RemoveParameterType -RemoveParameterValidation $RemoveParameterValidation
             $paramBlock = [Management.Automation.ProxyCommand]::GetParamBlock($metadata)
 
             if ($contextInfo.Command.CommandType -eq 'Cmdlet') {
@@ -330,6 +355,7 @@ about_Mocking
             Scope                   = $pester.CurrentTestGroup
             PesterState             = $pester
             Metadata                = $metadata
+            OriginalMetadata        = $originalMetadata
             CallHistory             = @()
             DynamicParamScriptBlock = $dynamicParamScriptBlock
             Aliases                 = @()
@@ -346,13 +372,16 @@ about_Mocking
     }
 
     $mock.Blocks = @(
-        $mock.Blocks | & $SafeCommands['Where-Object'] { $_.Filter.ToString() -eq '$True' }
-        if ($block.Filter.ToString() -eq '$True') {
+        # trim the script to avoid errors when formatting adds spaces around the default
+        # filter script, this only affects powershell v2, newer powershell trims it
+        # automatically
+        $mock.Blocks | & $SafeCommands['Where-Object'] { $_.Filter.ToString().Trim() -eq '$True' }
+        if ($block.Filter.ToString().Trim() -eq '$True') {
             $block
         }
 
-        $mock.Blocks | & $SafeCommands['Where-Object'] { $_.Filter.ToString() -ne '$True' }
-        if ($block.Filter.ToString() -ne '$True') {
+        $mock.Blocks | & $SafeCommands['Where-Object'] { $_.Filter.ToString().Trim() -ne '$True' }
+        if ($block.Filter.ToString().Trim() -ne '$True') {
             $block
         }
     )
@@ -394,13 +423,13 @@ This will not throw an exception because the mock was invoked.
     [CmdletBinding()]param()
     Assert-DescribeInProgress -CommandName Assert-VerifiableMock
 
-    $unVerified = @{}
+    $unVerified = @{ }
     $mockTable.Keys | & $SafeCommands['ForEach-Object'] {
         $m = $_;
 
         $mockTable[$m].blocks |
-            & $SafeCommands['Where-Object'] { $_.Verifiable } |
-            & $SafeCommands['ForEach-Object'] { $unVerified[$m] = $_ }
+        & $SafeCommands['Where-Object'] { $_.Verifiable } |
+        & $SafeCommands['ForEach-Object'] { $unVerified[$m] = $_ }
     }
     if ($unVerified.Count -gt 0) {
         foreach ($mock in $unVerified.Keys) {
@@ -566,7 +595,7 @@ to the original.
         [int]$Times = 1,
 
         [Parameter(ParameterSetName = 'ParameterFilter', Position = 2)]
-        [ScriptBlock]$ParameterFilter = {$True},
+        [ScriptBlock]$ParameterFilter = { $True },
 
         [Parameter(ParameterSetName = 'ExclusiveFilter', Mandatory = $true)]
         [scriptblock] $ExclusiveFilter,
@@ -748,7 +777,9 @@ function Exit-MockScope {
             [string[]] $Aliases
         )
 
-        $ExecutionContext.InvokeProvider.Item.Remove("Function:\$CommandName", $false, $true, $true)
+        if ($ExecutionContext.InvokeProvider.Item.Exists("Function:\$CommandName", $true, $true)) {
+            $ExecutionContext.InvokeProvider.Item.Remove("Function:\$CommandName", $false, $true, $true)
+        }
 
         foreach ($alias in $Aliases) {
             if ($ExecutionContext.InvokeProvider.Item.Exists("Alias:$alias", $true, $true)) {
@@ -849,7 +880,7 @@ function Validate-Command([string]$CommandName, [string]$ModuleName) {
         $session = Set-SessionStateHint -PassThru  -Hint "Module - $($module.Name)" -SessionState ( & $module { $ExecutionContext.SessionState } )
     }
 
-    $hash = @{Command = $command; Session = $session}
+    $hash = @{Command = $command; Session = $session }
 
     if ($command.CommandType -eq 'Function') {
         foreach ($mock in $mockTable.Values) {
@@ -915,7 +946,7 @@ function Invoke-Mock {
         $ModuleName,
 
         [hashtable]
-        $BoundParameters = @{},
+        $BoundParameters = @{ },
 
         [object[]]
         $ArgumentList = @(),
@@ -1047,7 +1078,7 @@ function FindMock {
 function FindMatchingBlock {
     param (
         [object] $Mock,
-        [hashtable] $BoundParameters = @{},
+        [hashtable] $BoundParameters = @{ },
         [object[]] $ArgumentList = @()
     )
 
@@ -1075,7 +1106,7 @@ function ExecuteBlock {
         [object] $Mock,
         [string] $CommandName,
         [string] $ModuleName,
-        [hashtable] $BoundParameters = @{},
+        [hashtable] $BoundParameters = @{ },
         [object[]] $ArgumentList = @()
     )
 
@@ -1096,7 +1127,7 @@ function ExecuteBlock {
             ${Script Block},
 
             [hashtable]
-            $___BoundParameters___ = @{},
+            $___BoundParameters___ = @{ },
 
             [object[]]
             $___ArgumentList___ = @(),
@@ -1190,7 +1221,7 @@ function Test-ParameterFilter {
     )
 
     if ($null -eq $BoundParameters) {
-        $BoundParameters = @{}
+        $BoundParameters = @{ }
     }
     if ($null -eq $ArgumentList) {
         $ArgumentList = @()
@@ -1282,7 +1313,7 @@ function Set-DynamicParameterVariable {
     )
 
     if ($null -eq $Parameters) {
-        $Parameters = @{}
+        $Parameters = @{ }
     }
 
     foreach ($keyValuePair in $Parameters.GetEnumerator()) {
@@ -1317,8 +1348,8 @@ function Get-DynamicParamBlock {
         If ( $ScriptBlock.AST.psobject.Properties.Name -match "Body") {
             if ($null -ne $ScriptBlock.Ast.Body.DynamicParamBlock) {
                 $statements = $ScriptBlock.Ast.Body.DynamicParamBlock.Statements |
-                    & $SafeCommands['Select-Object'] -ExpandProperty Extent |
-                    & $SafeCommands['Select-Object'] -ExpandProperty Text
+                & $SafeCommands['Select-Object'] -ExpandProperty Extent |
+                & $SafeCommands['Select-Object'] -ExpandProperty Text
 
                 return $statements -join "$([System.Environment]::NewLine)"
             }
@@ -1422,7 +1453,7 @@ function Get-DynamicParametersForCmdlet {
     }
     else {
         if ($null -eq $Parameters) {
-            $Parameters = @{}
+            $Parameters = @{ }
         }
 
         $cmdlet = & $SafeCommands['New-Object'] $command.ImplementingType.FullName
@@ -1540,28 +1571,65 @@ function Repair-ConflictingParameters {
     param(
         [Parameter(Mandatory = $true)]
         [System.Management.Automation.CommandMetadata]
-        $Metadata
+        $Metadata,
+        [Parameter()]
+        [string[]]
+        $RemoveParameterType,
+        [Parameter()]
+        [string[]]
+        $RemoveParameterValidation
     )
 
+    $repairedMetadata = New-Object System.Management.Automation.CommandMetadata -ArgumentList $Metadata
     $paramMetadatas = @()
-    $paramMetadatas += $Metadata.Parameters.Values
+    $paramMetadatas += $repairedMetadata.Parameters.Values
+
+    $conflictingParams = Get-ConflictingParameterNames
 
     foreach ($paramMetadata in $paramMetadatas) {
         if ($paramMetadata.IsDynamic) {
             continue
         }
 
-        $conflictingParams = Get-ConflictingParameterNames
         if ($conflictingParams -contains $paramMetadata.Name) {
             $paramName = $paramMetadata.Name
             $newName = "_$paramName"
             $paramMetadata.Name = $newName
             $paramMetadata.Aliases.Add($paramName)
 
-            $null = $Metadata.Parameters.Remove($paramName)
-            $Metadata.Parameters.Add($newName, $paramMetadata)
+            $null = $repairedMetadata.Parameters.Remove($paramName)
+            $repairedMetadata.Parameters.Add($newName, $paramMetadata)
+        }
+
+        $attrIndexesToRemove = New-Object System.Collections.ArrayList
+
+        if ($RemoveParameterType -contains $paramMetadata.Name) {
+            $paramMetadata.ParameterType = [object]
+
+            for ($i = 0; $i -lt $paramMetadata.Attributes.Count; $i++) {
+                $attr = $paramMetadata.Attributes[$i]
+                if ($attr -is [PSTypeNameAttribute]) {
+                    $null = $attrIndexesToRemove.Add($i)
+                    break
+                }
+            }
+        }
+
+        if ($RemoveParameterValidation -contains $paramMetadata.Name) {
+            for ($i = 0; $i -lt $paramMetadata.Attributes.Count; $i++) {
+                $attr = $paramMetadata.Attributes[$i]
+                if ($attr -is [System.Management.Automation.ValidateArgumentsAttribute]) {
+                    $null = $attrIndexesToRemove.Add($i)
+                }
+            }
+        }
+
+        foreach ($index in $attrIndexesToRemove) {
+            $null = $paramMetadata.Attributes.RemoveAt($index)
         }
     }
+
+    $repairedMetadata
 }
 
 function Reset-ConflictingParameters {
@@ -1590,14 +1658,36 @@ function Reset-ConflictingParameters {
     $parameters
 }
 
-$script:ConflictingParameterNames = @(
-    "PSEdition"
-)
-
 function Get-ConflictingParameterNames {
     $script:ConflictingParameterNames
 }
 
+function Initialize-ConflictingParameterNames {
+    foreach ($var in (& $script:SafeCommands['Get-Variable'])) {
+        if (($var.Options -band [System.Management.Automation.ScopedItemOptions]::Constant) -or ($var.Options -band [System.Management.Automation.ScopedItemOptions]::ReadOnly)) {
+            $var.Name
+        }
+    }
+}
+
+function Get-ScriptBlockAST {
+    param (
+        [scriptblock]
+        $ScriptBlock
+    )
+
+    if ($ScriptBlock.Ast -is [System.Management.Automation.Language.ScriptBlockAst]) {
+        $ast = $Block.Ast.EndBlock
+    }
+    elseif ($ScriptBlock.Ast -is [System.Management.Automation.Language.FunctionDefinitionAst]) {
+        $ast = $Block.Ast.Body.EndBlock
+    }
+    else {
+        throw "Pester failed to parse ParameterFilter, scriptblock is invalid type. Please reformat your ParameterFilter."
+    }
+
+    return $ast
+}
 
 function New-BlockWithoutParameterAliases {
     [CmdletBinding()]
@@ -1615,9 +1705,9 @@ function New-BlockWithoutParameterAliases {
     try {
         if ($PSVersionTable.PSVersion.Major -ge 3) {
             $params = $Metadata.Parameters.Values
-            $ast = $Block.Ast.EndBlock
+            $ast = Get-ScriptBlockAST $Block
             $blockText = $ast.Extent.Text
-            $variables = [array]($Ast.FindAll( { param($ast) $ast -is [System.Management.Automation.Language.VariableExpressionAst]}, $true))
+            $variables = [array]($Ast.FindAll( { param($ast) $ast -is [System.Management.Automation.Language.VariableExpressionAst] }, $true))
             [array]::Reverse($variables)
 
             foreach ($var in $variables) {
